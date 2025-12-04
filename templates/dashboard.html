@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>交换机端口监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .chart-container { margin: 20px 0; padding: 20px; background: #f5f5f5; border-radius: 8px; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .switch-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .port-up { color: green; }
+        .port-down { color: red; }
+        .port-warning { color: orange; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>交换机端口安全状态监控</h1>
+
+        <div class="chart-container">
+            <h2>端口状态热力图</h2>
+            <div id="heatmap" style="width: 100%; height: 400px;"></div>
+        </div>
+
+        <div class="status-grid" id="switchStatus">
+            <!-- 交换机状态卡片将通过JavaScript动态生成 -->
+        </div>
+
+        <div class="chart-container">
+            <h2>告警信息</h2>
+            <div id="alerts" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化图表
+        const heatmapChart = echarts.init(document.getElementById('heatmap'));
+        const alertsChart = echarts.init(document.getElementById('alerts'));
+
+        // 热力图配置
+        const heatmapOption = {
+            tooltip: {
+                formatter: function(params) {
+                    return `${params.data.switch} - ${params.data.port}<br/>
+                            状态: ${params.data.status}<br/>
+                            健康得分: ${params.data.score}<br/>
+                            错误包: ${params.data.errors}<br/>
+                            广播包: ${params.data.broadcast}`;
+                }
+            },
+            visualMap: {
+                min: 0,
+                max: 100,
+                calculable: true,
+                orient: 'horizontal',
+                left: 'center',
+                bottom: '10%',
+                inRange: {
+                    color: ['#c23531', '#d48265', '#91c7ae', '#749f83', '#ca8622']
+                }
+            },
+            series: [{
+                type: 'heatmap',
+                data: [],
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                    }
+                }
+            }]
+        };
+
+        // 告警图表配置
+        const alertsOption = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'shadow'
+                }
+            },
+            xAxis: {
+                type: 'category',
+                data: []
+            },
+            yAxis: {
+                type: 'value'
+            },
+            series: [{
+                data: [],
+                type: 'bar',
+                itemStyle: {
+                    color: function(params) {
+                        const colors = {
+                            'high': '#c23531',
+                            'medium': '#d48265',
+                            'low': '#91c7ae'
+                        };
+                        return colors[params.data.severity] || '#999';
+                    }
+                }
+            }]
+        };
+
+        // 更新数据函数
+        function updateData() {
+            // 更新热力图
+            fetch('/api/port_heatmap')
+                .then(response => response.json())
+                .then(data => {
+                    heatmapOption.series[0].data = data.map(item => ({
+                        value: [item.switch, item.port, item.score],
+                        switch: item.switch,
+                        port: item.port,
+                        status: item.status,
+                        score: item.score,
+                        errors: item.errors,
+                        broadcast: item.broadcast
+                    }));
+                    heatmapChart.setOption(heatmapOption);
+                });
+
+            // 更新交换机状态
+            fetch('/api/switch_status')
+                .then(response => response.json())
+                .then(data => {
+                    updateSwitchStatus(data);
+                });
+
+            // 更新告警信息
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    updateAlerts(data);
+                });
+        }
+
+        // 更新交换机状态显示
+        function updateSwitchStatus(data) {
+            const container = document.getElementById('switchStatus');
+            container.innerHTML = '';
+
+            for (const [key, switchData] of Object.entries(data)) {
+                const upPorts = switchData.ports.filter(p => p.oper_status === 'up').length;
+                const totalPorts = switchData.ports.length;
+
+                const card = document.createElement('div');
+                card.className = 'switch-card';
+                card.innerHTML = `
+                    <h3>${switchData.name} (${switchData.location})</h3>
+                    <p>状态: <span class="port-up">${upPorts}个端口UP</span> / ${totalPorts}个端口</p>
+                    <p>最后更新: ${switchData.last_update}</p>
+                    <div class="port-list">
+                        ${switchData.ports.slice(0, 5).map(port => `
+                            <div class="port-item ${port.oper_status}">
+                                ${port.name}: ${port.oper_status}
+                                ${port.in_errors > 0 ? ` (${port.in_errors} errors)` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        // 更新告警信息
+        function updateAlerts(alerts) {
+            // 按交换机分组统计告警
+            const alertCounts = {};
+            alerts.forEach(alert => {
+                if (!alertCounts[alert.switch]) {
+                    alertCounts[alert.switch] = 0;
+                }
+                alertCounts[alert.switch]++;
+            });
+
+            alertsOption.xAxis.data = Object.keys(alertCounts);
+            alertsOption.series[0].data = Object.values(alertCounts).map((count, index) => ({
+                value: count,
+                severity: alerts.find(a => a.switch === Object.keys(alertCounts)[index])?.severity || 'low'
+            }));
+
+            alertsChart.setOption(alertsOption);
+        }
+
+        // 定时更新数据
+        setInterval(updateData, 5000);
+        updateData(); // 初始加载
+
+        // 响应窗口大小变化
+        window.addEventListener('resize', function() {
+            heatmapChart.resize();
+            alertsChart.resize();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交换机端口安全监控系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 i {
+            color: #667eea;
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .status-up { background-color: #4CAF50; }
+        .status-down { background-color: #f44336; }
+        .status-warning { background-color: #ff9800; }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .dashboard-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .section-header h2 {
+            color: #333;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5a67d8;
+        }
+
+        .chart-container {
+            height: 400px;
+            width: 100%;
+        }
+
+        .switch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .switch-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .switch-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .switch-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .switch-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .switch-status {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-online {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-offline {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .port-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .port-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .port-item:last-child {
+            border-bottom: none;
+        }
+
+        .port-name {
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .port-status {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }
+
+        .port-up { background: #e8f5e9; color: #2e7d32; }
+        .port-down { background: #ffebee; color: #c62828; }
+
+        .port-stats {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .alerts-sidebar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .alert-item {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+        }
+
+        .alert-high {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+
+        .alert-medium {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+
+        .alert-low {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .alert-time {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .alert-desc {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .operations-panel {
+            margin-top: 20px;
+        }
+
+        .operation-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .form-group select,
+        .form-group input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            flex: 1;
+            transition: all 0.3s;
+        }
+
+        .btn-shutdown {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-shutdown:hover {
+            background: #d32f2f;
+        }
+
+        .btn-enable {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-enable:hover {
+            background: #388e3c;
+        }
+
+        .heatmap-cell {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .heatmap-cell:hover {
+            opacity: 0.8;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 16px;
+            color: #666;
+        }
+
+        .loading i {
+            margin-right: 10px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .switch-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>
+                <i class="fas fa-network-wired"></i>
+                交换机端口安全监控与自动化处理系统
+            </h1>
+            <div class="status-indicators">
+                <div class="status-item">
+                    <div class="status-dot status-up"></div>
+                    <span>正常</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot status-warning"></div>
+                    <span>警告</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot status-down"></div>
+                    <span>异常</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="main-content">
+            <!-- 左侧主区域 -->
+            <div>
+                <!-- 热力图区域 -->
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <h2><i class="fas fa-fire"></i> 端口状态热力图</h2>
+                        <button class="refresh-btn" onclick="refreshHeatmap()">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                    </div>
+                    <div id="heatmapChart" class="chart-container"></div>
+                </div>
+
+                <!-- 交换机列表 -->
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <h2><i class="fas fa-sitemap"></i> 交换机状态概览</h2>
+                        <button class="refresh-btn" onclick="refreshSwitches()">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                    </div>
+                    <div id="switchGrid" class="switch-grid">
+                        <!-- 动态生成交换机卡片 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧侧边栏 -->
+            <div>
+                <!-- 告警信息 -->
+                <div class="alerts-sidebar">
+                    <div class="section-header">
+                        <h2><i class="fas fa-exclamation-triangle"></i> 告警信息</h2>
+                        <button class="refresh-btn" onclick="refreshAlerts()">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div id="alertsList">
+                        <!-- 动态生成告警 -->
+                    </div>
+
+                    <!-- 自动化操作面板 -->
+                    <div class="operations-panel">
+                        <h3 style="margin-bottom: 15px;"><i class="fas fa-robot"></i> 自动化操作</h3>
+                        <form id="operationForm" class="operation-form">
+                            <div class="form-group">
+                                <label for="switchSelect">选择交换机:</label>
+                                <select id="switchSelect">
+                                    <!-- 动态填充 -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="portSelect">选择端口:</label>
+                                <select id="portSelect">
+                                    <option value="">先选择交换机</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="portStatus">当前状态:</label>
+                                <input type="text" id="portStatus" readonly>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-shutdown" onclick="shutdownPort()">
+                                    <i class="fas fa-power-off"></i> 关闭端口
+                                </button>
+                                <button type="button" class="btn btn-enable" onclick="enablePort()">
+                                    <i class="fas fa-play"></i> 启用端口
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let heatmapChart = null;
+        let allPortsData = [];
+        let switchesData = {};
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            loadData();
+            startAutoRefresh();
+        });
+
+        // 初始化图表
+        function initCharts() {
+            // 初始化热力图
+            heatmapChart = echarts.init(document.getElementById('heatmapChart'));
+
+            const heatmapOption = {
+                tooltip: {
+                    formatter: function(params) {
+                        const data = params.data;
+                        return `
+                            <div style="padding: 5px;">
+                                <strong>${data.switchName}</strong><br/>
+                                端口: ${data.portName}<br/>
+                                状态: <span style="color:${data.status === 'up' ? 'green' : 'red'}">${data.status}</span><br/>
+                                错误包: ${data.errors}<br/>
+                                广播包: ${data.broadcast}<br/>
+                                健康度: ${data.score}%
+                            </div>
+                        `;
+                    }
+                },
+                grid: {
+                    top: 50,
+                    bottom: 100,
+                    left: 100,
+                    right: 50
+                },
+                xAxis: {
+                    type: 'category',
+                    data: [],
+                    axisLabel: {
+                        rotate: 45,
+                        fontSize: 12
+                    }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: [],
+                    axisLabel: {
+                        fontSize: 12
+                    }
+                },
+                visualMap: {
+                    min: 0,
+                    max: 100,
+                    calculable: true,
+                    orient: 'horizontal',
+                    left: 'center',
+                    bottom: 30,
+                    text: ['异常', '正常'],
+                    textStyle: {
+                        color: '#333'
+                    },
+                    inRange: {
+                        color: ['#ff6b6b', '#4ecdc4']
+                    }
+                },
+                series: [{
+                    name: '端口健康度',
+                    type: 'heatmap',
+                    data: [],
+                    label: {
+                        show: true,
+                        formatter: function(params) {
+                            return params.data.status === 'down' ? '✗' : '';
+                        },
+                        color: '#fff',
+                        fontSize: 14
+                    },
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }]
+            };
+
+            heatmapChart.setOption(heatmapOption);
+
+            // 窗口大小变化时重绘
+            window.addEventListener('resize', function() {
+                heatmapChart.resize();
+            });
+        }
+
+        // 加载数据
+        async function loadData() {
+            try {
+                // 显示加载状态
+                showLoading();
+
+                // 并行加载所有数据
+                const [portsResponse, switchesResponse, alertsResponse] = await Promise.all([
+                    fetch('/api/port_heatmap'),
+                    fetch('/api/switch_status'),
+                    fetch('/api/alerts')
+                ]);
+
+                const portsData = await portsResponse.json();
+                const switchesData = await switchesResponse.json();
+                const alertsData = await alertsResponse.json();
+
+                // 处理数据
+                updateHeatmap(portsData);
+                updateSwitchGrid(switchesData);
+                updateAlertsList(alertsData);
+                updateSwitchDropdown(switchesData);
+
+            } catch (error) {
+                console.error('数据加载失败:', error);
+                showError('数据加载失败，请检查网络连接');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 更新热力图
+        function updateHeatmap(portsData) {
+            if (!portsData || portsData.length === 0) {
+                heatmapChart.setOption({
+                    title: {
+                        text: '暂无数据',
+                        left: 'center',
+                        top: 'center'
+                    }
+                });
+                return;
+            }
+
+            allPortsData = portsData;
+
+            // 准备热力图数据
+            const switches = [...new Set(portsData.map(item => item.switch))];
+            const ports = [...new Set(portsData.map(item => item.port))];
+
+            const heatmapData = portsData.map(item => {
+                const xIndex = switches.indexOf(item.switch);
+                const yIndex = ports.indexOf(item.port);
+
+                return {
+                    value: [xIndex, yIndex, item.score],
+                    switchName: item.switch,
+                    portName: item.port,
+                    status: item.status,
+                    errors: item.errors,
+                    broadcast: item.broadcast,
+                    score: item.score
+                };
+            });
+
+            const option = {
+                xAxis: {
+                    data: switches
+                },
+                yAxis: {
+                    data: ports
+                },
+                series: [{
+                    data: heatmapData
+                }]
+            };
+
+            heatmapChart.setOption(option);
+        }
+
+        // 更新交换机网格
+        function updateSwitchGrid(switchesData) {
+            switchesData = switchesData;
+            const gridContainer = document.getElementById('switchGrid');
+            gridContainer.innerHTML = '';
+
+            for (const [switchId, switchInfo] of Object.entries(switchesData)) {
+                const ports = switchInfo.ports || [];
+                const upPorts = ports.filter(p => p.oper_status === 'up').length;
+                const totalPorts = ports.length;
+
+                const card = document.createElement('div');
+                card.className = 'switch-card';
+                card.innerHTML = `
+                    <div class="switch-header">
+                        <div class="switch-title">${switchInfo.name}</div>
+                        <div class="switch-status status-online">
+                            <i class="fas fa-circle"></i> 在线
+                        </div>
+                    </div>
+                    <div class="switch-info">
+                        <div style="margin-bottom: 10px; color: #666; font-size: 14px;">
+                            <i class="fas fa-map-marker-alt"></i> ${switchInfo.location}
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">端口状态</div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="font-size: 24px; font-weight: bold; color: #4CAF50;">
+                                    ${upPorts}
+                                </div>
+                                <div style="font-size: 14px; color: #666;">
+                                    / ${totalPorts} 个端口
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="port-list">
+                        ${ports.slice(0, 5).map(port => `
+                            <div class="port-item">
+                                <div>
+                                    <div class="port-name">${port.name}</div>
+                                    <div class="port-stats">
+                                        错误: ${port.in_errors + port.out_errors} |
+                                        广播: ${port.in_broadcast_pkts}
+                                    </div>
+                                </div>
+                                <div class="port-status ${port.oper_status === 'up' ? 'port-up' : 'port-down'}">
+                                    ${port.oper_status === 'up' ? '正常' : '异常'}
+                                </div>
+                            </div>
+                        `).join('')}
+                        ${ports.length > 5 ? `
+                            <div style="text-align: center; padding: 10px; color: #666; font-size: 12px;">
+                                ... 还有 ${ports.length - 5} 个端口
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                gridContainer.appendChild(card);
+            }
+        }
+
+        // 更新告警列表
+        function updateAlertsList(alertsData) {
+            const alertsList = document.getElementById('alertsList');
+
+            if (!alertsData || alertsData.length === 0) {
+                alertsList.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <i class="fas fa-check-circle" style="font-size: 24px; margin-bottom: 10px; display: block; color: #4CAF50;"></i>
+                        暂无告警
+                    </div>
+                `;
+                return;
+            }
+
+            alertsList.innerHTML = alertsData.slice(0, 10).map(alert => {
+                const severityClass = `alert-${alert.severity || 'medium'}`;
+                const time = new Date(alert.created_at).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                return `
+                    <div class="alert-item ${severityClass}">
+                        <div class="alert-header">
+                            <span style="font-weight: bold; color: #333;">
+                                ${alert.switch} - Port ${alert.port}
+                            </span>
+                            <span class="alert-time">${time}</span>
+                        </div>
+                        <div class="alert-desc">${alert.description}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 更新交换机下拉列表
+        function updateSwitchDropdown(switchesData) {
+            const switchSelect = document.getElementById('switchSelect');
+            switchSelect.innerHTML = '<option value="">选择交换机</option>';
+
+            for (const [switchId, switchInfo] of Object.entries(switchesData)) {
+                const option = document.createElement('option');
+                option.value = switchInfo.ip || switchId;
+                option.textContent = `${switchInfo.name} (${switchInfo.location})`;
+                switchSelect.appendChild(option);
+            }
+
+            // 监听交换机选择变化
+            switchSelect.addEventListener('change', function() {
+                updatePortDropdown(this.value);
+            });
+        }
+
+        // 更新端口下拉列表
+        function updatePortDropdown(switchIp) {
+            const portSelect = document.getElementById('portSelect');
+            const portStatus = document.getElementById('portStatus');
+
+            portSelect.innerHTML = '<option value="">选择端口</option>';
+            portStatus.value = '';
+
+            if (!switchIp || !switchesData) return;
+
+            // 找到选中的交换机
+            const switchInfo = Object.values(switchesData).find(s => s.ip === switchIp);
+            if (!switchInfo || !switchInfo.ports) return;
+
+            // 填充端口列表
+            switchInfo.ports.forEach(port => {
+                const option = document.createElement('option');
+                option.value = port.name;
+                option.textContent = `${port.name} (${port.oper_status})`;
+                option.dataset.status = port.oper_status;
+                portSelect.appendChild(option);
+            });
+
+            // 监听端口选择变化
+            portSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                portStatus.value = selectedOption.dataset.status || '';
+            });
+        }
+
+        // 关闭端口
+        async function shutdownPort() {
+            const switchSelect = document.getElementById('switchSelect');
+            const portSelect = document.getElementById('portSelect');
+
+            if (!switchSelect.value || !portSelect.value) {
+                alert('请先选择交换机和端口');
+                return;
+            }
+
+            if (!confirm(`确认要关闭 ${switchSelect.selectedOptions[0].text} 的端口 ${portSelect.value} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/operations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        switch_ip: switchSelect.value,
+                        port_name: portSelect.value,
+                        operation: 'shutdown'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('端口关闭成功');
+                    loadData(); // 刷新数据
+                } else {
+                    alert('操作失败: ' + result.message);
+                }
+
+            } catch (error) {
+                console.error('操作失败:', error);
+                alert('操作失败，请检查网络连接');
+            }
+        }
+
+        // 启用端口
+        async function enablePort() {
+            const switchSelect = document.getElementById('switchSelect');
+            const portSelect = document.getElementById('portSelect');
+
+            if (!switchSelect.value || !portSelect.value) {
+                alert('请先选择交换机和端口');
+                return;
+            }
+
+            if (!confirm(`确认要启用 ${switchSelect.selectedOptions[0].text} 的端口 ${portSelect.value} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/operations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        switch_ip: switchSelect.value,
+                        port_name: portSelect.value,
+                        operation: 'enable'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('端口启用成功');
+                    loadData(); // 刷新数据
+                } else {
+                    alert('操作失败: ' + result.message);
+                }
+
+            } catch (error) {
+                console.error('操作失败:', error);
+                alert('操作失败，请检查网络连接');
+            }
+        }
+
+        // 刷新功能
+        function refreshHeatmap() {
+            showLoading();
+            fetch('/api/port_heatmap')
+                .then(response => response.json())
+                .then(data => {
+                    updateHeatmap(data);
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('刷新失败:', error);
+                    hideLoading();
+                });
+        }
+
+        function refreshSwitches() {
+            showLoading();
+            fetch('/api/switch_status')
+                .then(response => response.json())
+                .then(data => {
+                    updateSwitchGrid(data);
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('刷新失败:', error);
+                    hideLoading();
+                });
+        }
+
+        function refreshAlerts() {
+            showLoading();
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    updateAlertsList(data);
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('刷新失败:', error);
+                    hideLoading();
+                });
+        }
+
+        // 自动刷新
+        function startAutoRefresh() {
+            // 每30秒自动刷新一次
+            setInterval(() => {
+                loadData();
+            }, 30000);
+        }
+
+        // 工具函数
+        function showLoading() {
+            let loading = document.getElementById('loadingOverlay');
+            if (!loading) {
+                loading = document.createElement('div');
+                loading.id = 'loadingOverlay';
+                loading.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(255,255,255,0.8);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 9999;
+                `;
+                loading.innerHTML = `
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i> 加载中...
+                    </div>
+                `;
+                document.body.appendChild(loading);
+            }
+        }
+
+        function hideLoading() {
+            const loading = document.getElementById('loadingOverlay');
+            if (loading) {
+                loading.remove();
+            }
+        }
+
+        function showError(message) {
+            alert(message);
+        }
+    </script>
+</body>
+</html>
